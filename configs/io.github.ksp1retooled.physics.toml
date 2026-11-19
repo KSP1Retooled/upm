@@ -1,0 +1,6 @@
+# KSP Retooled's fork of Unity Physics, with the RetooledPhysics native backend. Its release workflow attaches the
+# package, with the native plug-in for Windows, Linux and macOS, to each GitHub release.
+name = "io.github.ksp1retooled.physics"
+repo = "KSP1Retooled/Unity.Physics"
+asset_match = '^io\.github\.ksp1retooled\.physics-.*\.tgz$'
+prereleases = false
