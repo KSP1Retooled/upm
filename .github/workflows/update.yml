@@ -1,0 +1,70 @@
+name: Update packages
+
+# Run after a release in another repo:
+#   gh workflow run update.yml -R <this repo> -f repo=<owner/name> -f tag=<tag>
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: Repo that made the release (owner/name). Empty updates every package.
+        required: false
+      tag:
+        description: Release tag. Empty uses the latest release.
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    name: Update packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build
+        run: cargo build --release --locked
+
+      # Runs for other releases can overlap. A queue would drop all but the newest waiting run, so
+      # every run regenerates on top of the current main and retries if it loses the push.
+      - name: Generate and push
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPO: ${{ inputs.repo }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          args=()
+          [ -n "$REPO" ] && args+=(--repo "$REPO")
+          [ -n "$TAG" ] && args+=(--tag "$TAG")
+
+          for attempt in 1 2 3 4 5; do
+            git fetch origin main
+            git reset --hard origin/main
+            ./target/release/upm-registry generate "${args[@]}"
+            ./target/release/upm-registry check
+
+            git add registry
+            if git diff --cached --quiet; then
+              echo "No new versions"
+              exit 0
+            fi
+
+            git commit -m "Update ${REPO:-all packages}${TAG:+ to $TAG}"
+            git push origin HEAD:main && exit 0
+            sleep $((attempt * 5))
+          done
+          echo "Couldn't push after 5 attempts" >&2
+          exit 1

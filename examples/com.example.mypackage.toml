@@ -1,0 +1,12 @@
+# The UPM package name. It has to match `name` in the tarball's package.json.
+name = "com.example.mypackage"
+
+# The GitHub repository that publishes the package, in the format "owner/repo".
+repo = "Person1/MyPackage"
+
+# A regular expression for the release asset to use. It has to match at most one
+# asset in a release. Leave it out to use the release's only .tgz file.
+asset_match = '^com\.example\.mypackage-.*\.tgz$'
+
+# Whether to publish GitHub releases that are marked as prereleases.
+prereleases = false
