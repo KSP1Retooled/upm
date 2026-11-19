@@ -10,8 +10,11 @@ on:
         description: Directory to npm pack and attach to the release. Omit to use existing release assets.
         type: string
     secrets:
-      UPM_PUBLISH_TOKEN:
-        description: Token with Actions write access to KSP1Retooled/upm.
+      APP_CLIENT_ID:
+        description: Client ID of the organization's automation app, which may start workflows in KSP1Retooled/upm.
+        required: true
+      APP_PRIVATE_KEY:
+        description: Private key of the same app.
         required: true
 
 jobs:
@@ -51,9 +54,20 @@ jobs:
             gh release upload --repo "$GITHUB_REPOSITORY" -- "$TAG" "$RUNNER_TEMP/$asset"
           fi
 
+      # The caller's own token cannot start a workflow in another repository, so the automation app grants one that
+      # can, limited to this repository.
+      - id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: KSP1Retooled
+          repositories: upm
+          permission-actions: write
+
       - name: Publish to the registry
         env:
-          GH_TOKEN: ${{ secrets.UPM_PUBLISH_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           runs=repos/KSP1Retooled/upm/actions
           run_id=$(gh api "$runs/workflows/update.yml/dispatches" \

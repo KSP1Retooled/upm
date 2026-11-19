@@ -25,8 +25,10 @@ hashes stop matching and Unity will refuse it, so publish a new version instead.
 ## Publish a release
 
 Once the package has a config here, add this workflow to the package repo as
-`.github/workflows/publish-upm.yml`. Set its `UPM_PUBLISH_TOKEN` secret to a
-fine-grained token with **Actions: write** on `KSP1Retooled/upm`.
+`.github/workflows/publish-upm.yml`. It starts the registry update with a token
+from the organization's automation app, so the package repo needs the
+organization secrets `APP_CLIENT_ID` and `APP_PRIVATE_KEY`. The app needs
+Actions write access to `KSP1Retooled/upm`.
 
 ```yaml
 name: Publish to UPM
@@ -42,7 +44,8 @@ jobs:
     with:
       package-path: .  # Directory containing the Unity package.json
     secrets:
-      UPM_PUBLISH_TOKEN: ${{ secrets.UPM_PUBLISH_TOKEN }}
+      APP_CLIENT_ID: ${{ secrets.APP_CLIENT_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 ```
 
 The workflow packs the tagged package, attaches the `.tgz` to the release, and
