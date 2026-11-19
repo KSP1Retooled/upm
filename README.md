@@ -84,5 +84,5 @@ gh workflow run deploy.yml -R KSP1Retooled/upm
 ```
 
 The workflow uses the same GitHub App as the site publisher. Make the Actions
-variable `APP_CLIENT_ID` and secret `APP_PRIVATE_KEY` available to this repo.
+secrets `APP_CLIENT_ID` and `APP_PRIVATE_KEY` available to this repo.
 The app needs Contents write access to `KSP1Retooled/ksp1retooled.github.io`.
