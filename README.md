@@ -24,7 +24,34 @@ hashes stop matching and Unity will refuse it, so publish a new version instead.
 
 ## Publish a release
 
-From a workflow in the package's repo, with a token that can run workflows here:
+Once the package has a config here, add this workflow to the package repo as
+`.github/workflows/publish-upm.yml`. Set its `UPM_PUBLISH_TOKEN` secret to a
+fine-grained token with **Actions: write** on `KSP1Retooled/upm`.
+
+```yaml
+name: Publish to UPM
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    permissions:
+      contents: write
+    uses: KSP1Retooled/upm/.github/workflows/publish.yml@main
+    with:
+      package-path: .  # Directory containing the Unity package.json
+    secrets:
+      UPM_PUBLISH_TOKEN: ${{ secrets.UPM_PUBLISH_TOKEN }}
+```
+
+The workflow packs the tagged package, attaches the `.tgz` to the release, and
+waits for the registry update and deployment. Reruns reuse the existing asset.
+If your release job already uploads the tarball, omit `package-path` and use
+`contents: read`. You can call the same workflow after that job with `needs`
+and pass its release tag via `with.tag`.
+
+To publish an existing release manually:
 
 ```sh
 gh workflow run update.yml -R KSP1Retooled/upm -f repo=<owner/name> -f tag=<tag>
@@ -47,5 +74,15 @@ Set `GITHUB_TOKEN` to avoid GitHub's anonymous rate limit.
 
 ## Hosting
 
-Deploy `registry/` as a static site. On Cloudflare Pages, use no build command and
-`registry` as the output directory. GitHub Pages works too.
+Use `https://ksp1retooled.github.io/upm/` as the scoped registry URL in Unity.
+The deploy workflow publishes the contents of `registry/` to `upm/` on the
+`gh-pages` branch of `KSP1Retooled/ksp1retooled.github.io`. It runs when the
+registry changes on `main`, after a successful package update, or manually:
+
+```sh
+gh workflow run deploy.yml -R KSP1Retooled/upm
+```
+
+The workflow uses the same GitHub App as the site publisher. Make the Actions
+variable `APP_CLIENT_ID` and secret `APP_PRIVATE_KEY` available to this repo.
+The app needs Contents write access to `KSP1Retooled/ksp1retooled.github.io`.

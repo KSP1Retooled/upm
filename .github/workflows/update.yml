@@ -68,3 +68,12 @@ jobs:
           done
           echo "Couldn't push after 5 attempts" >&2
           exit 1
+
+  # The update job pushes with GITHUB_TOKEN, so its push won't trigger deploy.yml.
+  deploy:
+    needs: update
+    permissions:
+      contents: read
+    uses: ./.github/workflows/deploy.yml
+    secrets:
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}

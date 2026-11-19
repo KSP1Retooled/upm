@@ -1,0 +1,48 @@
+name: Deploy registry
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'registry/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+  workflow_call:
+    secrets:
+      APP_PRIVATE_KEY:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-registry
+      queue: max
+    steps:
+      # An overlapping update or a rerun may already have advanced main.
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          persist-credentials: false
+
+      - run: cargo run --locked -- check
+
+      - id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: KSP1Retooled
+          repositories: ksp1retooled.github.io
+
+      - uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          repository-name: KSP1Retooled/ksp1retooled.github.io
+          branch: gh-pages
+          folder: registry
+          target-folder: upm
+          force: false
