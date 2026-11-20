@@ -5,12 +5,12 @@
         "name": "io.github.ksp1retooled.physics",
         "scope": "",
         "description": "A fork of Unity.Physics designed to perform well for large jointed craft and meant to be used by the native physics interface",
-        "version": "0.1.0",
+        "version": "0.1.1",
         "keywords": [
           "unity",
           "physics"
         ],
-        "date": "2026-11-20T00:29:48Z",
+        "date": "2026-11-20T01:35:22Z",
         "publisher": {},
         "maintainers": [],
         "links": {
@@ -30,5 +30,5 @@
     }
   ],
   "total": 1,
-  "time": "2026-11-20T00:29:48Z"
+  "time": "2026-11-20T01:35:22Z"
 }
