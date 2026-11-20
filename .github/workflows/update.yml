@@ -1,7 +1,5 @@
 name: Update packages
 
-# Run after a release in another repo:
-#   gh workflow run update.yml -R <this repo> -f repo=<owner/name> -f tag=<tag>
 on:
   workflow_dispatch:
     inputs:
@@ -11,17 +9,41 @@ on:
       tag:
         description: Release tag. Empty uses the latest release.
         required: false
+  workflow_call:
+    inputs:
+      all:
+        description: Include release history for every configured package.
+        type: boolean
+    secrets:
+      APP_CLIENT_ID:
+        required: true
+      APP_PRIVATE_KEY:
+        required: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   update:
-    name: Update packages
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Read the deployed state after acquiring the lock. A retry also starts from that state.
+    concurrency:
+      group: deploy-registry
+      queue: max
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Read previously published versions
+        uses: actions/checkout@v5
+        with:
+          repository: KSP1Retooled/ksp1retooled.github.io
+          ref: gh-pages
+          sparse-checkout: upm
+          path: published
+          persist-credentials: false
 
       - uses: actions/cache@v4
         with:
@@ -30,51 +52,51 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
 
-      - name: Build
-        run: cargo build --release --locked
-
-      # Runs for other releases can overlap. A queue would drop all but the newest waiting run, so
-      # every run regenerates on top of the current main and retries if it loses the push.
-      - name: Generate and push
+      - name: Generate and validate registry
         env:
           GITHUB_TOKEN: ${{ github.token }}
           REPO: ${{ inputs.repo }}
           TAG: ${{ inputs.tag }}
+          ALL_RELEASES: ${{ inputs.all }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mv published/upm registry
+          cargo build --locked
+          if [[ "$ALL_RELEASES" == "true" && -z "$(find configs -name '*.toml' -print -quit)" ]]; then
+            ./target/debug/upm-registry index
+          else
+            args=()
+            [[ "$ALL_RELEASES" == "true" ]] && args+=(--all)
+            [[ -n "$REPO" ]] && args+=(--repo "$REPO")
+            [[ -n "$TAG" ]] && args+=(--tag "$TAG")
+            ./target/debug/upm-registry generate "${args[@]}"
+          fi
+          ./target/debug/upm-registry check
 
-          args=()
-          [ -n "$REPO" ] && args+=(--repo "$REPO")
-          [ -n "$TAG" ] && args+=(--tag "$TAG")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: registry
+          path: registry/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
 
-          for attempt in 1 2 3 4 5; do
-            git fetch origin main
-            git reset --hard origin/main
-            ./target/release/upm-registry generate "${args[@]}"
-            ./target/release/upm-registry check
+      - id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: KSP1Retooled
+          repositories: ksp1retooled.github.io
+          permission-contents: write
 
-            git add registry
-            if git diff --cached --quiet; then
-              echo "No new versions"
-              exit 0
-            fi
-
-            git commit -m "Update ${REPO:-all packages}${TAG:+ to $TAG}"
-            git push origin HEAD:main && exit 0
-            sleep $((attempt * 5))
-          done
-          echo "Couldn't push after 5 attempts" >&2
-          exit 1
-
-  # The update job pushes with GITHUB_TOKEN, so its push won't trigger deploy.yml.
-  deploy:
-    needs: update
-    permissions:
-      contents: read
-    uses: ./.github/workflows/deploy.yml
-    secrets:
-      APP_CLIENT_ID: ${{ secrets.APP_CLIENT_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+      - uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          repository-name: KSP1Retooled/ksp1retooled.github.io
+          branch: gh-pages
+          folder: registry
+          target-folder: upm
+          force: false

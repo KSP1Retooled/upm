@@ -1,11 +1,8 @@
 # upm
 
-A Unity package registry for KSP Retooled. Package metadata lives in this repo and
-is served as static files. The package tarballs stay on each project's GitHub
-releases.
-
-`upm-registry` turns the TOML files in `configs/` into the JSON in `registry/`.
-Don't edit `registry/` by hand.
+A Unity package registry for KSP Retooled. This repo holds the generator and
+package configs. GitHub Pages serves the generated metadata, and each project's
+GitHub releases host its package tarballs.
 
 ## Add a package
 
@@ -13,7 +10,8 @@ The package's GitHub releases need a tarball with `package/package.json` at its
 root, as `npm pack` produces. Add a config for it to `configs/`. See
 [com.example.mypackage.toml](examples/com.example.mypackage.toml) for the options.
 
-Then publish its existing releases:
+Merging the config to `main` publishes its existing releases. To preview the
+generated files locally in the ignored `registry/` directory, run
 
 ```sh
 cargo run -- generate com.example.mypackage --all
@@ -78,9 +76,15 @@ Set `GITHUB_TOKEN` to avoid GitHub's anonymous rate limit.
 ## Hosting
 
 Use `https://ksp1retooled.github.io/upm/` as the scoped registry URL in Unity.
-The deploy workflow publishes the contents of `registry/` to `upm/` on the
-`gh-pages` branch of `KSP1Retooled/ksp1retooled.github.io`. It runs when the
-registry changes on `main`, after a successful package update, or manually:
+Each update starts from `upm/` on the `gh-pages` branch of
+`KSP1Retooled/ksp1retooled.github.io`, preserving previously published versions
+and their checksums. Actions queues updates, validates the generated files,
+keeps a downloadable `registry` artifact for seven days, and deploys the same
+files back to `upm/`.
+
+Package release workflows update the requested tag. Changes to the generator,
+configs, or deployment workflow on `main` sync all configured release histories.
+To run that sync manually, use
 
 ```sh
 gh workflow run deploy.yml -R KSP1Retooled/upm

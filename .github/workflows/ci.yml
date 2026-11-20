@@ -28,4 +28,15 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
-      - run: cargo run --locked -- check
+      - name: Check the generator against the published packages
+        uses: actions/checkout@v5
+        with:
+          repository: KSP1Retooled/ksp1retooled.github.io
+          ref: gh-pages
+          sparse-checkout: upm
+          path: published
+          persist-credentials: false
+      - run: |
+          mv published/upm registry
+          cargo run --locked -- index
+          cargo run --locked -- check
