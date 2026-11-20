@@ -1,3 +1,18 @@
 {
-  "_updated": 99999
+  "_updated": 99999,
+  "io.github.ksp1retooled.physics": {
+    "name": "io.github.ksp1retooled.physics",
+    "description": "A fork of Unity.Physics designed to perform well for large jointed craft and meant to be used by the native physics interface",
+    "maintainers": [],
+    "versions": {
+      "0.1.0": "latest"
+    },
+    "time": {
+      "modified": "2026-11-20T00:29:48Z"
+    },
+    "keywords": [
+      "unity",
+      "physics"
+    ]
+  }
 }

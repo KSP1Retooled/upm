@@ -1,0 +1,40 @@
+{
+  "name": "io.github.ksp1retooled.physics",
+  "_id": "io.github.ksp1retooled.physics",
+  "description": "A fork of Unity.Physics designed to perform well for large jointed craft and meant to be used by the native physics interface",
+  "dist-tags": {
+    "latest": "0.1.0"
+  },
+  "versions": {
+    "0.1.0": {
+      "displayName": "Unity Physics",
+      "category": "Unity",
+      "description": "A fork of Unity.Physics designed to perform well for large jointed craft and meant to be used by the native physics interface",
+      "dependencies": {
+        "com.unity.entities": "6.7.0",
+        "com.unity.test-framework": "1.6.0",
+        "com.unity.modules.imgui": "1.0.0",
+        "com.unity.modules.jsonserialize": "1.0.0"
+      },
+      "keywords": [
+        "unity",
+        "physics"
+      ],
+      "name": "io.github.ksp1retooled.physics",
+      "version": "0.1.0",
+      "_id": "io.github.ksp1retooled.physics@0.1.0",
+      "dist": {
+        "tarball": "https://github.com/KSP1Retooled/Unity.Physics/releases/download/v0.1.0/io.github.ksp1retooled.physics-0.1.0.tgz",
+        "shasum": "961e22d03ff15715f614f7137b8ad5db8631c703",
+        "integrity": "sha512-ojXUCeTBFH9Bp75LL3bqgf69aNWIkMJ28j7jVKwZEIIVl/CWgnTqTADMXeIyD27Bg2OSLA0vWdTbgsKxqro/Dg==",
+        "fileCount": 1704,
+        "unpackedSize": 11671681
+      }
+    }
+  },
+  "time": {
+    "created": "2026-11-20T00:29:48Z",
+    "modified": "2026-11-20T00:29:48Z",
+    "0.1.0": "2026-11-20T00:29:48Z"
+  }
+}
