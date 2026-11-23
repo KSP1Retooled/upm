@@ -1,0 +1,6 @@
+# Intel XeSS Super Resolution for Unity's built-in render pipeline on Windows. Its release workflow attaches the
+# package, with the native plug-in and Intel's XeSS runtime, to each GitHub release.
+name = "io.github.ksp1retooled.xess"
+repo = "KSP1Retooled/Retooled.XeSS"
+asset_match = '^io\.github\.ksp1retooled\.xess-.*\.tgz$'
+prereleases = false
