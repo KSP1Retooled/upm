@@ -1,0 +1,159 @@
+name: Sign package
+
+# Package Manager checks package signatures from Unity 6.3 on, and warns about unsigned packages. This workflow signs a
+# package tarball with Unity's upm CLI. The caller builds the tarball wherever it likes, usually with npm pack on a
+# GitHub-hosted runner, and uploads it as an artifact. Only the signing job runs on the organization's runner, because
+# that runner holds the key of the Unity service account that signs packages.
+#
+# The runner reads the key from /home/github/upm-signing.env, which must be readable by the job's user (1003) and set
+# UPM_SERVICE_ACCOUNT_KEY_ID, UPM_SERVICE_ACCOUNT_KEY_SECRET and UPM_ORG_ID.
+
+on:
+  workflow_call:
+    inputs:
+      artifact:
+        description: Name of the artifact that holds the unsigned .tgz, as npm pack makes it.
+        type: string
+        required: true
+      tag:
+        description: Release to attach the signed .tgz to. Empty attaches nothing.
+        type: string
+        default: ''
+    outputs:
+      artifact:
+        description: Name of the artifact that holds the signed .tgz.
+        value: ${{ inputs.artifact }}-signed
+      filename:
+        description: File name of the signed .tgz, <name>-<version>.tgz.
+        value: ${{ jobs.sign.outputs.filename }}
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  UPM_CLI_VERSION: v10.0.0
+  UPM_CLI_SHA256: 85852820608b9bb81bf112f8a9f242e06bbed0fceabb0eab24e4cabbdbec08a2
+
+jobs:
+  sign:
+    name: Sign
+    runs-on: self-hosted
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    container:
+      image: ghcr.io/ksp1retooled/ksp-ci:1
+      options: --user 1003:1003
+      volumes:
+        - /home/github/upm-signing.env:/run/upm-signing.env:ro
+    outputs:
+      filename: ${{ steps.sign.outputs.filename }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.artifact }}
+          path: ${{ runner.temp }}/unsigned
+
+      # The checksum is pinned here rather than read from Unity's CDN next to the download.
+      - name: Install the upm CLI
+        run: |
+          zip="$RUNNER_TEMP/upm.zip"
+          curl -fsSL --retry 3 -o "$zip" "https://cdn.packages.unity.com/upm-cli/releases/$UPM_CLI_VERSION/upm-linux-x64.zip"
+          echo "$UPM_CLI_SHA256  $zip" | sha256sum -c -
+          unzip -q "$zip" -d "$RUNNER_TEMP/upm-cli"
+          exe=$(find "$RUNNER_TEMP/upm-cli" -type f -name UnityPackageManager -print -quit)
+          chmod +x "$exe"
+          dirname "$exe" >> "$GITHUB_PATH"
+
+      # upm pack signs a folder, so the tarball is unpacked first. The caller's npm pack has already chosen the files,
+      # and the check at the end makes sure that the signed tarball holds the same files plus the signature.
+      - id: sign
+        name: Sign the package
+        env:
+          ARTIFACT: ${{ inputs.artifact }}
+        run: |
+          shopt -s nullglob
+          tarballs=("$RUNNER_TEMP"/unsigned/*.tgz)
+          if (( ${#tarballs[@]} != 1 )); then
+            echo "::error::The artifact $ARTIFACT must hold exactly one .tgz, but it holds ${#tarballs[@]}."
+            exit 1
+          fi
+          unsigned=${tarballs[0]}
+
+          src="$RUNNER_TEMP/src"
+          mkdir "$src"
+          tar -xzf "$unsigned" -C "$src"
+          if [[ ! -f "$src/package/package.json" ]]; then
+            echo "::error::$(basename "$unsigned") has no package/package.json. Make it with npm pack."
+            exit 1
+          fi
+          if [[ -e "$src/package/.attestation.p7m" ]]; then
+            echo "::error::$(basename "$unsigned") is already signed."
+            exit 1
+          fi
+          filename="$(jq -er .name "$src/package/package.json")-$(jq -er .version "$src/package/package.json").tgz"
+
+          if [[ ! -r /run/upm-signing.env ]]; then
+            echo "::error::This runner has no /home/github/upm-signing.env, so it cannot sign packages."
+            exit 1
+          fi
+          set -a
+          source /run/upm-signing.env
+          set +a
+          echo "::add-mask::$UPM_SERVICE_ACCOUNT_KEY_SECRET"
+
+          out="$RUNNER_TEMP/out"
+          UnityPackageManager pack "$src/package" --organization-id "$UPM_ORG_ID" --destination "$out"
+          signed=("$out"/*.tgz)
+          if (( ${#signed[@]} != 1 )); then
+            echo "::error::upm pack made ${#signed[@]} tarballs, but one was expected."
+            exit 1
+          fi
+          mkdir "$RUNNER_TEMP/signed"
+          mv "${signed[0]}" "$RUNNER_TEMP/signed/$filename"
+
+          list() { tar -tzf "$1" | grep -v '/$' | sort; }
+          list "$RUNNER_TEMP/signed/$filename" > "$RUNNER_TEMP/signed.txt"
+          if ! grep -qx package/.attestation.p7m "$RUNNER_TEMP/signed.txt"; then
+            echo "::error::The tarball that upm pack made has no package/.attestation.p7m."
+            exit 1
+          fi
+          if ! diff <(list "$unsigned") <(grep -vx package/.attestation.p7m "$RUNNER_TEMP/signed.txt"); then
+            echo "::error::The signed tarball holds different files from the unsigned one."
+            exit 1
+          fi
+          echo "filename=$filename" >> "$GITHUB_OUTPUT"
+          echo "Signed $filename"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ inputs.artifact }}-signed
+          path: ${{ runner.temp }}/signed/${{ steps.sign.outputs.filename }}
+          if-no-files-found: error
+
+  # Attaching runs on a GitHub-hosted runner, so the job that can read the signing key gets no write token.
+  attach:
+    name: Attach to the release
+    needs: sign
+    if: inputs.tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: ${{ inputs.artifact }}-signed
+          path: ${{ runner.temp }}/signed
+
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          FILENAME: ${{ needs.sign.outputs.filename }}
+        run: |
+          assets=$(gh release view --repo "$GITHUB_REPOSITORY" --json assets -- "$TAG")
+          if jq -e --arg name "$FILENAME" 'any(.assets[]; .name == $name)' <<< "$assets" > /dev/null; then
+            echo "Using the existing release asset $FILENAME"
+          else
+            gh release upload --repo "$GITHUB_REPOSITORY" -- "$TAG" "$RUNNER_TEMP/signed/$FILENAME"
+          fi
