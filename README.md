@@ -38,6 +38,8 @@ package repo's release workflow:
 
 Once the package has a config here, add this workflow to the package repo as
 `.github/workflows/publish-upm.yml`. Everything runs on GitHub-hosted runners.
+Signing gets a job of its own, so the signing key never reaches the job that
+fetches and builds the package.
 
 ```yaml
 name: Publish to UPM
@@ -51,8 +53,8 @@ env:
 jobs:
   pack:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    outputs:
+      filename: ${{ steps.pack.outputs.filename }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -73,10 +75,25 @@ jobs:
           expect: |
             Plugins/x86_64/MyPlugin.dll
             Plugins/x86_64/MyPlugin.dll.meta
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: ${{ steps.pack.outputs.path }}
+
+  sign:
+    needs: pack
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: ${{ runner.temp }}/package
       - id: sign
         uses: KSP1Retooled/upm/sign@main
         with:
-          tarball: ${{ steps.pack.outputs.path }}
+          tarball: ${{ runner.temp }}/package/${{ needs.pack.outputs.filename }}
           organization-id: ${{ vars.UPM_ORG_ID }}
           key-id: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_ID }}
           key: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY }}
@@ -86,7 +103,7 @@ jobs:
         run: gh release upload --repo "$GITHUB_REPOSITORY" -- "$TAG" "$SIGNED"
 
   publish:
-    needs: pack
+    needs: sign
     permissions:
       contents: read
     uses: KSP1Retooled/upm/.github/workflows/publish.yml@main
