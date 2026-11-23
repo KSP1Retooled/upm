@@ -1,0 +1,55 @@
+name: Commit binaries
+
+# Commits the native binaries that earlier jobs in the caller's run uploaded as artifacts to the branch that started the
+# run. Call it with needs set to those jobs, and only for branch runs. A push made with the run's token does not start
+# another run, so building and committing do not loop.
+
+on:
+  workflow_call:
+    inputs:
+      artifacts:
+        description: Name or pattern of the artifacts that hold the binaries. Their files are merged into one folder.
+        type: string
+        required: true
+      path:
+        description: Folder in the repository to put the binaries in, such as Plugins/x86_64.
+        type: string
+        required: true
+
+jobs:
+  commit:
+    name: Commit the binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Check out the branch rather than the commit that started the run, so that the binaries land on the branch's
+      # current head.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ inputs.artifacts }}
+          path: ${{ inputs.path }}
+          merge-multiple: true
+
+      - env:
+          BINARY_PATH: ${{ inputs.path }}
+        run: |
+          git add -- "$BINARY_PATH"
+          if git diff --cached --quiet; then
+            echo "The binaries did not change."
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m "Build the native plug-in from ${GITHUB_SHA::10}"
+          for attempt in 1 2 3; do
+            git push origin "HEAD:$GITHUB_REF_NAME" && exit 0
+            git pull --rebase origin "$GITHUB_REF_NAME"
+          done
+          exit 1

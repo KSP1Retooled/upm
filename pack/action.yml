@@ -1,0 +1,67 @@
+name: Pack Unity package
+description: Pack a Unity package with npm pack, and check which files went into it.
+
+# .npmignore, or .gitignore when a package has no .npmignore, decides what goes into the tarball. Files that a workflow
+# fetched or built are easy to leave out by mistake, so list them in expect.
+
+inputs:
+  package-path:
+    description: Folder that holds package.json.
+    default: .
+  destination:
+    description: Folder to write the .tgz to. Defaults to package under the runner's temporary folder.
+    default: ''
+  expect:
+    description: Paths that the package must contain, one per line, relative to package.json.
+    default: ''
+  forbid:
+    description: Extended regular expressions, one per line. The package must contain no path that matches one.
+    default: ''
+
+outputs:
+  path:
+    description: Path of the .tgz.
+    value: ${{ steps.pack.outputs.path }}
+  filename:
+    description: File name of the .tgz.
+    value: ${{ steps.pack.outputs.filename }}
+
+runs:
+  using: composite
+  steps:
+    - id: pack
+      shell: bash
+      working-directory: ${{ inputs.package-path }}
+      env:
+        DESTINATION: ${{ inputs.destination }}
+        EXPECT: ${{ inputs.expect }}
+        FORBID: ${{ inputs.forbid }}
+      run: |
+        destination=${DESTINATION:-$RUNNER_TEMP/package}
+        mkdir -p "$destination"
+        filename=$(npm pack --ignore-scripts --json --pack-destination "$destination" | jq -er '.[0].filename')
+        path="$destination/$filename"
+        contents=$(tar -tzf "$path" | sed 's#^package/##')
+
+        status=0
+        while IFS= read -r file; do
+          [[ -z "${file//[[:space:]]/}" ]] && continue
+          if ! grep -qxF -- "$file" <<< "$contents"; then
+            echo "::error::The package is missing $file."
+            status=1
+          fi
+        done <<< "$EXPECT"
+        while IFS= read -r pattern; do
+          [[ -z "${pattern//[[:space:]]/}" ]] && continue
+          while IFS= read -r file; do
+            echo "::error::The package includes $file, which matches the forbidden pattern $pattern."
+            status=1
+          done < <(grep -E -- "$pattern" <<< "$contents" || true)
+        done <<< "$FORBID"
+        if (( status != 0 )); then
+          exit 1
+        fi
+
+        echo "path=$path" >> "$GITHUB_OUTPUT"
+        echo "filename=$filename" >> "$GITHUB_OUTPUT"
+        echo "Packed $filename"
