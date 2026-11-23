@@ -1,12 +1,9 @@
 name: Sign package
 
 # Package Manager checks package signatures from Unity 6.3 on, and warns about unsigned packages. This workflow signs a
-# package tarball with Unity's upm CLI. The caller builds the tarball wherever it likes, usually with npm pack on a
-# GitHub-hosted runner, and uploads it as an artifact. Only the signing job runs on the organization's runner, because
-# that runner holds the key of the Unity service account that signs packages.
-#
-# The runner reads the key from /home/github/upm-signing.env, which must be readable by the job's user (1003) and set
-# UPM_SERVICE_ACCOUNT_KEY_ID, UPM_SERVICE_ACCOUNT_KEY_SECRET and UPM_ORG_ID.
+# package tarball with Unity's upm CLI, using the organization's Unity service account. The caller builds the tarball
+# wherever it likes, usually with npm pack on a GitHub-hosted runner, and uploads it as an artifact. Only the signing
+# job runs on the organization's runner.
 
 on:
   workflow_call:
@@ -19,6 +16,16 @@ on:
         description: Release to attach the signed .tgz to. Empty attaches nothing.
         type: string
         default: ''
+    secrets:
+      UPM_SERVICE_ACCOUNT_KEY_ID:
+        description: Key ID of a Unity service account with the Package Manager Package Signer role.
+        required: true
+      UPM_SERVICE_ACCOUNT_KEY_SECRET:
+        description: Key secret of the same service account.
+        required: true
+      UPM_ORG_ID:
+        description: ID of the Unity organization that signs the package.
+        required: true
     outputs:
       artifact:
         description: Name of the artifact that holds the signed .tgz.
@@ -45,8 +52,6 @@ jobs:
     container:
       image: ghcr.io/ksp1retooled/ksp-ci:1
       options: --user 1003:1003
-      volumes:
-        - /home/github/upm-signing.env:/run/upm-signing.env:ro
     outputs:
       filename: ${{ steps.sign.outputs.filename }}
     steps:
@@ -72,6 +77,9 @@ jobs:
         name: Sign the package
         env:
           ARTIFACT: ${{ inputs.artifact }}
+          UPM_SERVICE_ACCOUNT_KEY_ID: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_ID }}
+          UPM_SERVICE_ACCOUNT_KEY_SECRET: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_SECRET }}
+          UPM_ORG_ID: ${{ secrets.UPM_ORG_ID }}
         run: |
           shopt -s nullglob
           tarballs=("$RUNNER_TEMP"/unsigned/*.tgz)
@@ -93,15 +101,6 @@ jobs:
             exit 1
           fi
           filename="$(jq -er .name "$src/package/package.json")-$(jq -er .version "$src/package/package.json").tgz"
-
-          if [[ ! -r /run/upm-signing.env ]]; then
-            echo "::error::This runner has no /home/github/upm-signing.env, so it cannot sign packages."
-            exit 1
-          fi
-          set -a
-          source /run/upm-signing.env
-          set +a
-          echo "::add-mask::$UPM_SERVICE_ACCOUNT_KEY_SECRET"
 
           out="$RUNNER_TEMP/out"
           UnityPackageManager pack "$src/package" --organization-id "$UPM_ORG_ID" --destination "$out"

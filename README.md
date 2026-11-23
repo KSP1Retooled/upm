@@ -26,9 +26,8 @@ Package Manager warns about unsigned packages from Unity 6.3 on, so releases
 are signed before they reach the registry. Two reusable workflows handle that:
 
 - `sign.yml` signs an `npm pack` tarball with Unity's upm CLI and attaches it
-  to the release. Only its signing job runs on the organization's runner,
-  which holds the signing key. Everything else can run on GitHub-hosted
-  runners.
+  to the release. Only its signing job runs on the organization's runner.
+  Everything else can run on GitHub-hosted runners.
 - `publish.yml` adds the release to the registry and waits for the deployment.
 
 Once the package has a config here, add this workflow to the package repo as
@@ -64,6 +63,10 @@ jobs:
     with:
       artifact: package
       tag: ${{ github.event.release.tag_name }}
+    secrets:
+      UPM_SERVICE_ACCOUNT_KEY_ID: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_ID }}
+      UPM_SERVICE_ACCOUNT_KEY_SECRET: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_SECRET }}
+      UPM_ORG_ID: ${{ secrets.UPM_ORG_ID }}
 
   publish:
     needs: sign
@@ -77,26 +80,17 @@ jobs:
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 ```
 
-The package repo needs access to the organization's runner, and the
-organization secrets `APP_CLIENT_ID` and `APP_PRIVATE_KEY`. The automation app
-needs Actions write access to `KSP1Retooled/upm`. Reruns reuse the existing
-release asset.
+The package repo needs access to the organization's runner and to these
+organization secrets:
 
-### Signing setup
+- `UPM_SERVICE_ACCOUNT_KEY_ID` and `UPM_SERVICE_ACCOUNT_KEY_SECRET`: the key
+  of a Unity service account with the **Package Manager Package Signer** role.
+- `UPM_ORG_ID`: the Unity organization ID, from Administration > Settings in
+  the Unity Cloud Dashboard.
+- `APP_CLIENT_ID` and `APP_PRIVATE_KEY`: the organization's automation app,
+  which needs Actions write access to `KSP1Retooled/upm`.
 
-Signing uses a Unity service account with the **Package Manager Package
-Signer** role in the organization. Its key lives on the runner, not in GitHub,
-in `/home/github/upm-signing.env`, which the job's user (1003) must be able to
-read:
-
-```sh
-UPM_SERVICE_ACCOUNT_KEY_ID=...
-UPM_SERVICE_ACCOUNT_KEY_SECRET=...
-UPM_ORG_ID=...
-```
-
-The organization ID is under Administration > Settings in the Unity Cloud
-Dashboard.
+Reruns reuse the existing release asset.
 
 To publish an existing release manually:
 
