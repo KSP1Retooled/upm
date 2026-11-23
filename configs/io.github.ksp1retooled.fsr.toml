@@ -1,0 +1,6 @@
+# AMD FSR upscaling and native anti-aliasing for Unity's built-in render pipeline on Windows. Its release workflow
+# attaches the package, with the native plug-in and AMD's signed FSR DLLs, to each GitHub release.
+name = "io.github.ksp1retooled.fsr"
+repo = "KSP1Retooled/Retooled.FSR"
+asset_match = '^io\.github\.ksp1retooled\.fsr-.*\.tgz$'
+prereleases = false
