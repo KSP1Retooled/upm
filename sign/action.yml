@@ -2,7 +2,7 @@ name: Sign Unity package
 description: Sign an npm pack tarball with Unity's upm CLI, so that Package Manager can verify it.
 
 # Package Manager checks package signatures from Unity 6.3 on, and warns about unsigned packages. This action runs on
-# Linux x64 and needs curl, unzip, jq and sha256sum, plus gh to attach the tarball to a release.
+# Linux x64 and needs curl, unzip, jq and sha256sum.
 
 inputs:
   tarball:
@@ -17,12 +17,6 @@ inputs:
   key:
     description: Key secret of the same service account.
     required: true
-  tag:
-    description: Release to attach the signed .tgz to. Empty attaches nothing.
-    default: ''
-  github-token:
-    description: Token that can upload release assets, which needs contents write.
-    default: ${{ github.token }}
 
 outputs:
   path:
@@ -101,19 +95,3 @@ runs:
         echo "path=$signed" >> "$GITHUB_OUTPUT"
         echo "filename=$filename" >> "$GITHUB_OUTPUT"
         echo "Signed $filename"
-
-    - name: Attach to the release
-      if: inputs.tag != ''
-      shell: bash
-      env:
-        GH_TOKEN: ${{ inputs.github-token }}
-        TAG: ${{ inputs.tag }}
-        SIGNED: ${{ steps.sign.outputs.path }}
-        FILENAME: ${{ steps.sign.outputs.filename }}
-      run: |
-        assets=$(gh release view --repo "$GITHUB_REPOSITORY" --json assets -- "$TAG")
-        if jq -e --arg name "$FILENAME" 'any(.assets[]; .name == $name)' <<< "$assets" > /dev/null; then
-          echo "Using the existing release asset $FILENAME"
-        else
-          gh release upload --repo "$GITHUB_REPOSITORY" -- "$TAG" "$SIGNED"
-        fi

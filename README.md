@@ -25,8 +25,9 @@ hashes stop matching and Unity will refuse it, so publish a new version instead.
 Package Manager warns about unsigned packages from Unity 6.3 on, so releases
 are signed before they reach the registry:
 
-- The `sign` action signs an `npm pack` tarball with Unity's upm CLI and
-  attaches it to the release. It runs on Linux x64.
+- The `sign` action signs an `npm pack` tarball with Unity's upm CLI. It runs
+  on Linux x64. The calling workflow attaches the signed tarball to the
+  release.
 - The `publish.yml` workflow adds the release to the registry and waits for
   the deployment.
 
@@ -70,13 +71,18 @@ jobs:
           path: ${{ runner.temp }}/package
       - id: tarball
         run: echo "path=$(ls "$RUNNER_TEMP"/package/*.tgz)" >> "$GITHUB_OUTPUT"
-      - uses: KSP1Retooled/upm/sign@main
+      - id: sign
+        uses: KSP1Retooled/upm/sign@main
         with:
           tarball: ${{ steps.tarball.outputs.path }}
           organization-id: ${{ vars.UPM_ORG_ID }}
           key-id: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_ID }}
           key: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY }}
-          tag: ${{ github.event.release.tag_name }}
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          SIGNED: ${{ steps.sign.outputs.path }}
+        run: gh release upload --repo "$GITHUB_REPOSITORY" -- "$TAG" "$SIGNED"
 
   publish:
     needs: sign
@@ -98,8 +104,6 @@ secrets:
   of a Unity service account with the **Package Manager Package Signer** role.
 - `APP_CLIENT_ID` and `APP_PRIVATE_KEY`: the organization's automation app,
   which needs Actions write access to `KSP1Retooled/upm`.
-
-Reruns reuse the existing release asset.
 
 To publish an existing release manually:
 
