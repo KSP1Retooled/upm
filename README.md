@@ -23,16 +23,17 @@ hashes stop matching and Unity will refuse it, so publish a new version instead.
 ## Publish a release
 
 Package Manager warns about unsigned packages from Unity 6.3 on, so releases
-are signed before they reach the registry. Two reusable workflows handle that:
+are signed before they reach the registry:
 
-- `sign.yml` signs an `npm pack` tarball with Unity's upm CLI and attaches it
-  to the release. Only its signing job runs on the organization's runner.
-  Everything else can run on GitHub-hosted runners.
-- `publish.yml` adds the release to the registry and waits for the deployment.
+- The `sign` action signs an `npm pack` tarball with Unity's upm CLI and
+  attaches it to the release. It runs on Linux x64.
+- The `publish.yml` workflow adds the release to the registry and waits for
+  the deployment.
 
 Once the package has a config here, add this workflow to the package repo as
 `.github/workflows/publish-upm.yml`. Build and pack the package in the `pack`
-job, and upload the `.tgz` as an artifact.
+job, which can run on a GitHub-hosted runner. Only the `sign` job needs the
+organization's runner.
 
 ```yaml
 name: Publish to UPM
@@ -57,16 +58,25 @@ jobs:
 
   sign:
     needs: pack
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/ksp1retooled/ksp-ci:1
     permissions:
       contents: write
-    uses: KSP1Retooled/upm/.github/workflows/sign.yml@main
-    with:
-      artifact: package
-      tag: ${{ github.event.release.tag_name }}
-      organization-id: ${{ vars.UPM_ORG_ID }}
-    secrets:
-      UPM_SERVICE_ACCOUNT_KEY_ID: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_ID }}
-      UPM_SERVICE_ACCOUNT_KEY: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: ${{ runner.temp }}/package
+      - id: tarball
+        run: echo "path=$(ls "$RUNNER_TEMP"/package/*.tgz)" >> "$GITHUB_OUTPUT"
+      - uses: KSP1Retooled/upm/sign@main
+        with:
+          tarball: ${{ steps.tarball.outputs.path }}
+          organization-id: ${{ vars.UPM_ORG_ID }}
+          key-id: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_ID }}
+          key: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY }}
+          tag: ${{ github.event.release.tag_name }}
 
   publish:
     needs: sign

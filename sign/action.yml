@@ -1,0 +1,119 @@
+name: Sign Unity package
+description: Sign an npm pack tarball with Unity's upm CLI, so that Package Manager can verify it.
+
+# Package Manager checks package signatures from Unity 6.3 on, and warns about unsigned packages. This action runs on
+# Linux x64 and needs curl, unzip, jq and sha256sum, plus gh to attach the tarball to a release.
+
+inputs:
+  tarball:
+    description: Path of the unsigned .tgz, as npm pack makes it.
+    required: true
+  organization-id:
+    description: ID of the Unity organization that signs the package.
+    required: true
+  key-id:
+    description: Key ID of a Unity service account with the Package Manager Package Signer role.
+    required: true
+  key:
+    description: Key secret of the same service account.
+    required: true
+  tag:
+    description: Release to attach the signed .tgz to. Empty attaches nothing.
+    default: ''
+  github-token:
+    description: Token that can upload release assets, which needs contents write.
+    default: ${{ github.token }}
+
+outputs:
+  path:
+    description: Path of the signed .tgz.
+    value: ${{ steps.sign.outputs.path }}
+  filename:
+    description: File name of the signed .tgz, <name>-<version>.tgz.
+    value: ${{ steps.sign.outputs.filename }}
+
+runs:
+  using: composite
+  steps:
+    # The checksum is pinned here rather than read from Unity's CDN next to the download.
+    - name: Install the upm CLI
+      shell: bash
+      env:
+        UPM_CLI_VERSION: v10.0.0
+        UPM_CLI_SHA256: 85852820608b9bb81bf112f8a9f242e06bbed0fceabb0eab24e4cabbdbec08a2
+      run: |
+        dir="$RUNNER_TEMP/upm-cli-$UPM_CLI_VERSION"
+        if [[ ! -d "$dir" ]]; then
+          zip="$RUNNER_TEMP/upm-cli.zip"
+          curl -fsSL --retry 3 -o "$zip" "https://cdn.packages.unity.com/upm-cli/releases/$UPM_CLI_VERSION/upm-linux-x64.zip"
+          echo "$UPM_CLI_SHA256  $zip" | sha256sum -c -
+          unzip -q "$zip" -d "$dir"
+          rm "$zip"
+        fi
+        exe=$(find "$dir" -type f -name UnityPackageManager -print -quit)
+        chmod +x "$exe"
+        dirname "$exe" >> "$GITHUB_PATH"
+
+    # upm pack signs a folder, so the tarball is unpacked first. npm pack has already chosen the files, and the check at
+    # the end makes sure that the signed tarball holds the same files plus the signature.
+    - id: sign
+      name: Sign the package
+      shell: bash
+      env:
+        UNSIGNED: ${{ inputs.tarball }}
+        UPM_ORG_ID: ${{ inputs.organization-id }}
+        UPM_SERVICE_ACCOUNT_KEY_ID: ${{ inputs.key-id }}
+        UPM_SERVICE_ACCOUNT_KEY_SECRET: ${{ inputs.key }}
+      run: |
+        shopt -s nullglob
+        work=$(mktemp -d "$RUNNER_TEMP/upm-sign.XXXXXX")
+        mkdir "$work/src" "$work/out" "$work/signed"
+        tar -xzf "$UNSIGNED" -C "$work/src"
+        if [[ ! -f "$work/src/package/package.json" ]]; then
+          echo "::error::$(basename "$UNSIGNED") has no package/package.json. Make it with npm pack."
+          exit 1
+        fi
+        if [[ -e "$work/src/package/.attestation.p7m" ]]; then
+          echo "::error::$(basename "$UNSIGNED") is already signed."
+          exit 1
+        fi
+        filename="$(jq -er .name "$work/src/package/package.json")-$(jq -er .version "$work/src/package/package.json").tgz"
+
+        UnityPackageManager pack "$work/src/package" --organization-id "$UPM_ORG_ID" --destination "$work/out"
+        made=("$work"/out/*.tgz)
+        if (( ${#made[@]} != 1 )); then
+          echo "::error::upm pack made ${#made[@]} tarballs, but one was expected."
+          exit 1
+        fi
+        signed="$work/signed/$filename"
+        mv "${made[0]}" "$signed"
+
+        list() { tar -tzf "$1" | grep -v '/$' | sort; }
+        list "$signed" > "$work/signed.txt"
+        if ! grep -qx package/.attestation.p7m "$work/signed.txt"; then
+          echo "::error::The tarball that upm pack made has no package/.attestation.p7m."
+          exit 1
+        fi
+        if ! diff <(list "$UNSIGNED") <(grep -vx package/.attestation.p7m "$work/signed.txt"); then
+          echo "::error::The signed tarball holds different files from the unsigned one."
+          exit 1
+        fi
+        echo "path=$signed" >> "$GITHUB_OUTPUT"
+        echo "filename=$filename" >> "$GITHUB_OUTPUT"
+        echo "Signed $filename"
+
+    - name: Attach to the release
+      if: inputs.tag != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        TAG: ${{ inputs.tag }}
+        SIGNED: ${{ steps.sign.outputs.path }}
+        FILENAME: ${{ steps.sign.outputs.filename }}
+      run: |
+        assets=$(gh release view --repo "$GITHUB_REPOSITORY" --json assets -- "$TAG")
+        if jq -e --arg name "$FILENAME" 'any(.assets[]; .name == $name)' <<< "$assets" > /dev/null; then
+          echo "Using the existing release asset $FILENAME"
+        else
+          gh release upload --repo "$GITHUB_REPOSITORY" -- "$TAG" "$SIGNED"
+        fi

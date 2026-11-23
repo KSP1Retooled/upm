@@ -1,6 +1,6 @@
 name: Publish package
 
-# Adds a release's package tarball to the registry. Attach a signed tarball to the release first, with sign.yml.
+# Adds a release's package tarball to the registry. Attach a signed tarball to the release first, with the sign action.
 
 on:
   workflow_call:
