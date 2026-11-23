@@ -37,8 +37,9 @@ package repo's release workflow:
   the deployment.
 
 Once the package has a config here, add this workflow to the package repo as
-`.github/workflows/publish-upm.yml`. The `pack` job can run on a GitHub-hosted
-runner. Only the `sign` job needs the organization's runner.
+`.github/workflows/publish-upm.yml`. Everything runs on GitHub-hosted runners.
+Signing gets a job of its own, so the signing key never reaches the job that
+fetches and builds the package.
 
 ```yaml
 name: Publish to UPM
@@ -81,9 +82,7 @@ jobs:
 
   sign:
     needs: pack
-    runs-on: self-hosted
-    container:
-      image: ghcr.io/ksp1retooled/ksp-ci:1
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
@@ -117,9 +116,8 @@ jobs:
 
 Leave out `source` and `binaries` if the package has no native plug-in.
 
-The package repo needs access to the organization's runner, the organization
-variable `UPM_ORG_ID` (the Unity organization ID), and these organization
-secrets:
+The package repo needs access to the organization variable `UPM_ORG_ID` (the
+Unity organization ID) and these organization secrets:
 
 - `UPM_SERVICE_ACCOUNT_KEY_ID` and `UPM_SERVICE_ACCOUNT_KEY`: the key
   of a Unity service account with the **Package Manager Package Signer** role.
