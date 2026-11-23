@@ -1,0 +1,7 @@
+# NVIDIA DLSS Super Resolution and DLAA for Unity's built-in render pipeline on Windows, through NVIDIA's Streamline
+# SDK. Its release workflow attaches the package, with the native plug-in and the Streamline DLLs, to each GitHub
+# release. NVIDIA's DLSS runtime is not in the package: the application provides it.
+name = "io.github.ksp1retooled.dlss"
+repo = "KSP1Retooled/Retooled.DLSS"
+asset_match = '^io\.github\.ksp1retooled\.dlss-.*\.tgz$'
+prereleases = false
