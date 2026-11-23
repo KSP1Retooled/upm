@@ -22,11 +22,19 @@ hashes stop matching and Unity will refuse it, so publish a new version instead.
 
 ## Publish a release
 
+Package Manager warns about unsigned packages from Unity 6.3 on, so releases
+are signed before they reach the registry:
+
+- The `sign` action signs an `npm pack` tarball with Unity's upm CLI. It runs
+  on Linux x64. The calling workflow attaches the signed tarball to the
+  release.
+- The `publish.yml` workflow adds the release to the registry and waits for
+  the deployment.
+
 Once the package has a config here, add this workflow to the package repo as
-`.github/workflows/publish-upm.yml`. It starts the registry update with a token
-from the organization's automation app, so the package repo needs the
-organization secrets `APP_CLIENT_ID` and `APP_PRIVATE_KEY`. The app needs
-Actions write access to `KSP1Retooled/upm`.
+`.github/workflows/publish-upm.yml`. Build and pack the package in the `pack`
+job, which can run on a GitHub-hosted runner. Only the `sign` job needs the
+organization's runner.
 
 ```yaml
 name: Publish to UPM
@@ -35,22 +43,67 @@ on:
     types: [published]
 
 jobs:
-  publish:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: refs/tags/${{ github.event.release.tag_name }}
+          persist-credentials: false
+      # Build anything the package needs here.
+      - run: npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP/package"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: ${{ runner.temp }}/package/*.tgz
+
+  sign:
+    needs: pack
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/ksp1retooled/ksp-ci:1
     permissions:
       contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+          path: ${{ runner.temp }}/package
+      - id: tarball
+        run: echo "path=$(ls "$RUNNER_TEMP"/package/*.tgz)" >> "$GITHUB_OUTPUT"
+      - id: sign
+        uses: KSP1Retooled/upm/sign@main
+        with:
+          tarball: ${{ steps.tarball.outputs.path }}
+          organization-id: ${{ vars.UPM_ORG_ID }}
+          key-id: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_ID }}
+          key: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY }}
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          SIGNED: ${{ steps.sign.outputs.path }}
+        run: gh release upload --repo "$GITHUB_REPOSITORY" -- "$TAG" "$SIGNED"
+
+  publish:
+    needs: sign
+    permissions:
+      contents: read
     uses: KSP1Retooled/upm/.github/workflows/publish.yml@main
     with:
-      package-path: .  # Directory containing the Unity package.json
+      tag: ${{ github.event.release.tag_name }}
     secrets:
       APP_CLIENT_ID: ${{ secrets.APP_CLIENT_ID }}
       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
 ```
 
-The workflow packs the tagged package, attaches the `.tgz` to the release, and
-waits for the registry update and deployment. Reruns reuse the existing asset.
-If your release job already uploads the tarball, omit `package-path` and use
-`contents: read`. You can call the same workflow after that job with `needs`
-and pass its release tag via `with.tag`.
+The package repo needs access to the organization's runner, the organization
+variable `UPM_ORG_ID` (the Unity organization ID), and these organization
+secrets:
+
+- `UPM_SERVICE_ACCOUNT_KEY_ID` and `UPM_SERVICE_ACCOUNT_KEY`: the key
+  of a Unity service account with the **Package Manager Package Signer** role.
+- `APP_CLIENT_ID` and `APP_PRIVATE_KEY`: the organization's automation app,
+  which needs Actions write access to `KSP1Retooled/upm`.
 
 To publish an existing release manually:
 

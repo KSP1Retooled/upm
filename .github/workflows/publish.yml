@@ -1,13 +1,12 @@
 name: Publish package
 
+# Adds a release's package tarball to the registry. Attach a signed tarball to the release first, with the sign action.
+
 on:
   workflow_call:
     inputs:
       tag:
         description: Published release tag. Defaults to the caller's release or tag.
-        type: string
-      package-path:
-        description: Directory to npm pack and attach to the release. Omit to use existing release assets.
         type: string
     secrets:
       APP_CLIENT_ID:
@@ -32,26 +31,6 @@ jobs:
           if [[ -z "$TAG" ]]; then
             echo "::error::Pass the published release tag using the tag input."
             exit 1
-          fi
-
-      - uses: actions/checkout@v5
-        if: inputs.package-path != ''
-        with:
-          ref: refs/tags/${{ env.TAG }}
-          persist-credentials: false
-
-      - name: Pack and attach the Unity package
-        if: inputs.package-path != ''
-        working-directory: ${{ inputs.package-path }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          asset=$(npm pack --ignore-scripts --json --pack-destination "$RUNNER_TEMP" | jq -er '.[0].filename')
-          assets=$(gh release view --repo "$GITHUB_REPOSITORY" --json assets -- "$TAG")
-          if jq -e --arg name "$asset" 'any(.assets[]; .name == $name)' <<< "$assets" > /dev/null; then
-            echo "Using existing release asset $asset"
-          else
-            gh release upload --repo "$GITHUB_REPOSITORY" -- "$TAG" "$RUNNER_TEMP/$asset"
           fi
 
       # The caller's own token cannot start a workflow in another repository, so the automation app grants one that
