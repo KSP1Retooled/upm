@@ -24,7 +24,7 @@ on:
       UPM_SERVICE_ACCOUNT_KEY_ID:
         description: Key ID of a Unity service account with the Package Manager Package Signer role.
         required: true
-      UPM_SERVICE_ACCOUNT_KEY_SECRET:
+      UPM_SERVICE_ACCOUNT_KEY:
         description: Key secret of the same service account.
         required: true
     outputs:
@@ -79,7 +79,7 @@ jobs:
         env:
           ARTIFACT: ${{ inputs.artifact }}
           UPM_SERVICE_ACCOUNT_KEY_ID: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_ID }}
-          UPM_SERVICE_ACCOUNT_KEY_SECRET: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_SECRET }}
+          UPM_SERVICE_ACCOUNT_KEY_SECRET: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY }}
           UPM_ORG_ID: ${{ inputs.organization-id }}
         run: |
           shopt -s nullglob

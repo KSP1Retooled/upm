@@ -66,7 +66,7 @@ jobs:
       organization-id: ${{ vars.UPM_ORG_ID }}
     secrets:
       UPM_SERVICE_ACCOUNT_KEY_ID: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_ID }}
-      UPM_SERVICE_ACCOUNT_KEY_SECRET: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_SECRET }}
+      UPM_SERVICE_ACCOUNT_KEY: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY }}
 
   publish:
     needs: sign
@@ -84,7 +84,7 @@ The package repo needs access to the organization's runner, the organization
 variable `UPM_ORG_ID` (the Unity organization ID), and these organization
 secrets:
 
-- `UPM_SERVICE_ACCOUNT_KEY_ID` and `UPM_SERVICE_ACCOUNT_KEY_SECRET`: the key
+- `UPM_SERVICE_ACCOUNT_KEY_ID` and `UPM_SERVICE_ACCOUNT_KEY`: the key
   of a Unity service account with the **Package Manager Package Signer** role.
 - `APP_CLIENT_ID` and `APP_PRIVATE_KEY`: the organization's automation app,
   which needs Actions write access to `KSP1Retooled/upm`.
