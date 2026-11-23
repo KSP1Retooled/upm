@@ -16,15 +16,16 @@ on:
         description: Release to attach the signed .tgz to. Empty attaches nothing.
         type: string
         default: ''
+      organization-id:
+        description: ID of the Unity organization that signs the package. Pass vars.UPM_ORG_ID.
+        type: string
+        required: true
     secrets:
       UPM_SERVICE_ACCOUNT_KEY_ID:
         description: Key ID of a Unity service account with the Package Manager Package Signer role.
         required: true
       UPM_SERVICE_ACCOUNT_KEY_SECRET:
         description: Key secret of the same service account.
-        required: true
-      UPM_ORG_ID:
-        description: ID of the Unity organization that signs the package.
         required: true
     outputs:
       artifact:
@@ -79,7 +80,7 @@ jobs:
           ARTIFACT: ${{ inputs.artifact }}
           UPM_SERVICE_ACCOUNT_KEY_ID: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_ID }}
           UPM_SERVICE_ACCOUNT_KEY_SECRET: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_SECRET }}
-          UPM_ORG_ID: ${{ secrets.UPM_ORG_ID }}
+          UPM_ORG_ID: ${{ inputs.organization-id }}
         run: |
           shopt -s nullglob
           tarballs=("$RUNNER_TEMP"/unsigned/*.tgz)
