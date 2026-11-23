@@ -37,8 +37,7 @@ package repo's release workflow:
   the deployment.
 
 Once the package has a config here, add this workflow to the package repo as
-`.github/workflows/publish-upm.yml`. The `pack` job can run on a GitHub-hosted
-runner. Only the `sign` job needs the organization's runner.
+`.github/workflows/publish-upm.yml`. Everything runs on GitHub-hosted runners.
 
 ```yaml
 name: Publish to UPM
@@ -52,8 +51,8 @@ env:
 jobs:
   pack:
     runs-on: ubuntu-latest
-    outputs:
-      filename: ${{ steps.pack.outputs.filename }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v5
         with:
@@ -74,27 +73,10 @@ jobs:
           expect: |
             Plugins/x86_64/MyPlugin.dll
             Plugins/x86_64/MyPlugin.dll.meta
-      - uses: actions/upload-artifact@v4
-        with:
-          name: package
-          path: ${{ steps.pack.outputs.path }}
-
-  sign:
-    needs: pack
-    runs-on: self-hosted
-    container:
-      image: ghcr.io/ksp1retooled/ksp-ci:1
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: package
-          path: ${{ runner.temp }}/package
       - id: sign
         uses: KSP1Retooled/upm/sign@main
         with:
-          tarball: ${{ runner.temp }}/package/${{ needs.pack.outputs.filename }}
+          tarball: ${{ steps.pack.outputs.path }}
           organization-id: ${{ vars.UPM_ORG_ID }}
           key-id: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY_ID }}
           key: ${{ secrets.UPM_SERVICE_ACCOUNT_KEY }}
@@ -104,7 +86,7 @@ jobs:
         run: gh release upload --repo "$GITHUB_REPOSITORY" -- "$TAG" "$SIGNED"
 
   publish:
-    needs: sign
+    needs: pack
     permissions:
       contents: read
     uses: KSP1Retooled/upm/.github/workflows/publish.yml@main
@@ -117,9 +99,8 @@ jobs:
 
 Leave out `source` and `binaries` if the package has no native plug-in.
 
-The package repo needs access to the organization's runner, the organization
-variable `UPM_ORG_ID` (the Unity organization ID), and these organization
-secrets:
+The package repo needs access to the organization variable `UPM_ORG_ID` (the
+Unity organization ID) and these organization secrets:
 
 - `UPM_SERVICE_ACCOUNT_KEY_ID` and `UPM_SERVICE_ACCOUNT_KEY`: the key
   of a Unity service account with the **Package Manager Package Signer** role.
